@@ -2,35 +2,25 @@ import os, requests, anthropic
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
-VINATIS_URL = "https://www.vinatis.com/achat-vin-promotion"
+SCRAPER_KEY = os.environ["SCRAPER_KEY"]
 
 def scrape():
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "fr-FR,fr;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-    }
-    try:
-        r = requests.get(VINATIS_URL, headers=headers, timeout=30)
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(r.text, "html.parser")
-        items = []
-        for i in soup.select("div.product-item,li.product-item,article.product,.product_item,.item-product"):
-            n = i.select_one(".product-name,.name,h2,h3")
-            p = i.select_one(".price,.product-price,.prix")
-            if n and p: items.append(n.get_text(strip=True)+" | "+p.get_text(strip=True))
-        if items: return "\n".join(items)
-        text = soup.get_text(separator="\n", strip=True)
-        lines = [l for l in text.split("\n") if l and len(l)>10]
-        return "\n".join(lines[:300])
-    except Exception as e:
-        return "Impossible de scraper Vinatis: "+str(e)
+    url = "http://api.scraperapi.com?api_key="+SCRAPER_KEY+"&url=https://www.vinatis.com/achat-vin-promotion&render=true"
+    r = requests.get(url, timeout=60)
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(r.text, "html.parser")
+    items = []
+    for i in soup.select("div.product-item,li.product-item,article.product,.product_item"):
+        n = i.select_one(".product-name,.name,h2,h3")
+        p = i.select_one(".price,.product-price,.prix")
+        if n and p: items.append(n.get_text(strip=True)+" | "+p.get_text(strip=True))
+    if items: return "\n".join(items)
+    lines = [l for l in soup.get_text(separator="\n",strip=True).split("\n") if len(l)>10]
+    return "\n".join(lines[:300])
 
 def ask_claude(txt):
     cl = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    p = "Tu es expert en vins francais. Voici le contenu de la page promotions de Vinatis:\n\n"+txt+"\n\nSi tu trouves des vins en promo: selectionne environ 200eur de blancs francais, Loire en priorite, 15-30eur/bt, justifie chaque choix, signale Ruinart si present, donne le total. Si le contenu ne contient pas de vins, dis-le clairement et explique."
+    p = "Tu es expert en vins francais. Voici le contenu de la page promotions de Vinatis:\n\n"+txt+"\n\nSelectionne environ 200eur de blancs francais, Loire en priorite, 15-30eur/bt. Signale Ruinart si present. Justifie chaque choix. Donne le total."
     return cl.messages.create(model="claude-haiku-4-5-20251001",max_tokens=1500,messages=[{"role":"user","content":p}]).content[0].text
 
 def tg(txt):
